@@ -1,0 +1,6 @@
+
+Model Name, MAE, DTW, TDI
+trans-mse-ar, 33.226944, 33.226948, 3784.490723, 0.000000, 0.000000
+
+
+IN test right side contains non anamolous points.

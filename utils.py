@@ -14,7 +14,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import time,random
 from pdb import set_trace
 from data.synthetic_dataset import create_synthetic_dataset, create_sin_dataset, SyntheticDataset
-from data.real_dataset import parse_ECG5000, parse_Traffic, parse_Taxi, parse_Traffic911, parse_gc_datasets, parse_synthetic, parse_weather, parse_bafu, parse_meteo, parse_azure, parse_ett, parse_sin_noisy, parse_Solar, parse_etthourly, parse_m4hourly, parse_m4daily, parse_taxi30min, parse_aggtest, parse_electricity, parse_foodinflation, parse_telemetry,parse_synthetic
+from data.real_dataset import parse_electricity,parse_smd,parse_gecco
 torch.backends.cudnn.deterministic = True
 
 to_float_tensor = lambda x: torch.FloatTensor(x.copy())
@@ -474,32 +474,27 @@ def aggregate_data(y, agg_type, K, is_var, a=None, v=None):
 class TimeSeriesDatasetOfflineAggregate(torch.utils.data.Dataset):
     """docstring for TimeSeriesDatasetOfflineAggregate"""
     def __init__(
-        self, data, enc_len, dec_len, aggregation_type, K,
-        feats_info, which_split, tsid_map=None, input_norm=None, target_norm=None,
-        norm_type=None, feats_norms=None, train_obj=None
+        self, data, enc_len, dec_len, feats_info, which_split,
+        tsid_map=None, input_norm=None, target_norm=None,
+        norm_type=None, feats_norms=None, train_obj=None,options = [],nhead =1
     ):
         super(TimeSeriesDatasetOfflineAggregate, self).__init__()
 
-        assert enc_len%K == 0
-        assert dec_len%K == 0
-
-        print('Creating dataset:', aggregation_type, K)
+        print('Creating dataset')
         self._base_enc_len = enc_len
+        self.nhead = nhead
         self._base_dec_len = dec_len
         #self.num_values = len(data[0]['target'][0])
         self.which_split = which_split
-        self.aggregation_type = aggregation_type
-        self.K = K
         self.input_norm = input_norm
         self.target_norm = target_norm
         self.norm_type = norm_type
         self.feats_info = feats_info
         self.tsid_map = tsid_map
         self.feats_norms = feats_norms
+        self.options = options
         #self.train_obj = train_obj
         #self.generate_a()
-        self.a = get_a(self.aggregation_type, self.K)
-        self.S = 1
 
         # Perform aggregation if level != 1
         st = time.time()
@@ -508,31 +503,29 @@ class TimeSeriesDatasetOfflineAggregate(torch.utils.data.Dataset):
             #print(i, len(data))
             ex = data[i]['target']
             ex_i = data[i]['target_inj']
+            ex_m = data[i]['target_mask']
             ex_f = data[i]['feats']
             ex_len = len(ex)
-            ex = ex[ ex_len%self.K: ]
-            ex_i = ex_i[ ex_len%self.K: ]
-            ex_f = ex_f[ ex_len%self.K: ]
-
-            #bp = np.arange(1,len(ex), 1)
-            if which_split in ['train']:
-                bp = [(i, self.K) for i in np.arange(0, len(ex)-self.K+1, self.S)]
-            elif which_split in ['dev', 'test']:
-                bp = [(i, self.K) for i in np.arange(0, len(ex), self.K)]
+            # ex = ex[ ex_len%self.K: ]
+            # ex_i = ex_i[ ex_len%self.K: ]
+            # ex_m = ex_m[ ex_len%self.K: ]
+            # ex_f = ex_f[ ex_len%self.K: ]
 
             ex_agg = ex
             ex_i_agg = ex_i
+            ex_m_agg = ex_m
             ex_f_agg = ex_f
 
             data_agg.append(
                 {
                     'target':ex_agg,
                     'target_inj':ex_i_agg,
+                    'target_mask':ex_m_agg,
                     'feats':ex_f_agg,
                 }
             )
         et = time.time()
-        print(which_split, self.aggregation_type, self.K, 'total time:', et-st)
+        print(which_split, 'total time:', et-st)
 
         #if self.K>1 and which_split in ['dev']:
         #    import ipdb ; ipdb.set_trace()
@@ -615,7 +608,17 @@ class TimeSeriesDatasetOfflineAggregate(torch.utils.data.Dataset):
         #output_size = len(self.data[0]['target'][0])
         output_size = 1
         return output_size
-
+    def get_mask(self,ex_mask):
+        
+        ex_mask = torch.tensor(ex_mask,dtype=bool)
+        head1 = ex_mask * ex_mask.unsqueeze(-1)
+        head2 = torch.zeros_like(head1)==1
+        if self.nhead == 1:
+            return head1
+        
+        # ex_mask = torch.stack(tuple(head1.repeat(self.nhead,1)))
+        ex_mask = torch.stack((head1,head1,head1,head1))
+        return ex_mask
     def __len__(self):
         return len(self.indices)
 
@@ -625,21 +628,34 @@ class TimeSeriesDatasetOfflineAggregate(torch.utils.data.Dataset):
         pos_id = self.indices[idx][1]
 
         if self.which_split in ['train']:
-            el = self.base_enc_len // self.S
-            dl = self.base_dec_len // self.S
+            el = self.base_enc_len
+            dl = self.base_dec_len
         elif self.which_split in ['dev', 'test']:
             el = self.enc_len
             dl = self.dec_len
         # print(self.base_enc_len,self.base_dec_len,self.S)
-        ex_input = self.data[ts_id]['target_inj'][ pos_id : pos_id+el ]
-        ex_target = self.data[ts_id]['target'][ pos_id+el : pos_id+el+dl ]
+        ex_input = self.data[ts_id]['target'][ pos_id : pos_id+el ]
+        ex_target = self.data[ts_id]['target'][ pos_id : pos_id+el ]
+        ex_mask = torch.zeros_like(ex_input)
         # ex_target = self.data[ts_id]['target'][ pos_id : pos_id+el ]
+
         #### anomalies only in test data
-        if self.which_split in ['train']:
-            ex_input = self.data[ts_id]['target_inj'][ pos_id : pos_id+el ]
+        # set_trace()
+        if self.which_split in ['test']:
+            ex_target = self.data[ts_id]['target_inj'][ pos_id : pos_id+el ]
+            
+
+        mvalue = ex_input.mean()
+        if self.which_split in self.options:
+            ex_input = self.data[ts_id]['target_inj'][ pos_id : pos_id+el ]        
+            ex_mask = self.data[ts_id]['target_mask'][ pos_id : pos_id+el ] 
+        # for ind,val in enumerate(ex_mask):
+        #     if val == 1:
+        #         ex_input[ind]=mvalue
         
+        ex_input[ex_mask==1]=mvalue
         # print('after', ex_input.shape, ex_target.shape, ts_id, pos_id)
-        # import pdb;pdb.set_trace()
+        
         if self.tsid_map is None:
             mapped_id = ts_id
         else:
@@ -678,9 +694,19 @@ class TimeSeriesDatasetOfflineAggregate(torch.utils.data.Dataset):
         #)
 
         #print(ex_input.shape, ex_target.shape, ex_input_feats.shape, ex_target_feats.shape)
+        # set_trace()
 
+        # attn_mask = torch.ones(self.base_enc_len,self.base_enc_len)
+        # ex_mask = attn_mask.masked_fill(ex_mask==1,value=-1e9)
+
+        ex_mask = self.get_mask(ex_mask)
+        # attn_mask = torch.ones(self.base_enc_len,self.base_enc_len)!=1.
+        # # print(ex_mask)
+        # ex_mask = attn_mask.masked_fill(ex_mask==True,value=True)
+
+        # set_trace()
         return (
-            ex_input, ex_target,
+            ex_input, ex_target, ex_mask,
             ex_input_feats, ex_target_feats,
             mapped_id,
             torch.FloatTensor([ts_id, pos_id])
@@ -733,159 +759,26 @@ class DataProcessor(object):
         super(DataProcessor, self).__init__()
         self.args = args
 
-        if args.dataset_name in ['synth']:
-            # parameters
-            N = 500
-            sigma = 0.01
-    
-            # Load synthetic dataset
-            (
-                X_train_input, X_train_target,
-                X_dev_input, X_dev_target,
-                X_test_input, X_test_target,
-                train_bkp, dev_bkp, test_bkp,
-            ) = create_synthetic_dataset(N, args.N_input, args.N_output, sigma)
-    
-        elif args.dataset_name in ['sin']:
-            N = 100
-            sigma = 0.01
-    
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = create_sin_dataset(N, args.N_input, args.N_output, sigma)
-    
-        elif args.dataset_name in ['ECG5000']:
-            (
-                X_train_input, X_train_target,
-                X_dev_input, X_dev_target,
-                X_test_input, X_test_target,
-                train_bkp, dev_bkp, test_bkp,
-                data_train, data_dev, data_test
-            ) = parse_ECG5000(args.N_input, args.N_output)
-    
-        elif args.dataset_name in ['Traffic']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = parse_Traffic(args.N_input, args.N_output)
-    
-        elif args.dataset_name in ['Taxi']:
-            (
-                X_train_input, X_train_target,
-                X_dev_input, X_dev_target,
-                X_test_input, X_test_target,
-                train_bkp, dev_bkp, test_bkp,
-                data_train, data_dev, data_test
-            ) = parse_Taxi(args.N_input, args.N_output)
-    
-        elif args.dataset_name in ['Traffic911']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info, coeffs_info
-            ) = parse_Traffic911(args.N_input, args.N_output)
-        elif args.dataset_name in ['Exchange', 'Wiki']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = parse_gc_datasets(args.dataset_name, args.N_input, args.N_output)
-
-        elif args.dataset_name in ['weather']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = parse_weather(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['bafu']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = parse_bafu(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['meteo']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map
-            ) = parse_meteo(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['azure']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_azure(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['ett']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_ett(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['sin_noisy']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info, coeffs_info
-            ) = parse_sin_noisy(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['Solar']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_Solar(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['etthourly']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_etthourly(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['m4hourly']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info, coeffs_info
-            ) = parse_m4hourly(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['m4daily']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info, coeffs_info
-            ) = parse_m4daily(args.dataset_name, args.N_input, args.N_output)
-        elif args.dataset_name in ['taxi30min']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_taxi30min(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['aggtest']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_aggtest(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['electricity']:
+        if args.dataset_name in ['electricity']:
             (
                 data_train, data_dev, data_test,
                 dev_tsid_map, test_tsid_map,
                 feats_info
             ) = parse_electricity(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['foodinflation']:
+        elif args.dataset_name in ['smd']:
             (
                 data_train, data_dev, data_test,
                 dev_tsid_map, test_tsid_map,
                 feats_info
-            ) = parse_foodinflation(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['telemetry']:
+            ) = parse_smd(args.dataset_name, args.N_input, args.N_output)
+        
+        elif args.dataset_name in ['gecco']:
             (
                 data_train, data_dev, data_test,
                 dev_tsid_map, test_tsid_map,
                 feats_info
-            ) = parse_telemetry(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-        elif args.dataset_name in ['outlier']:
-            (
-                data_train, data_dev, data_test,
-                dev_tsid_map, test_tsid_map,
-                feats_info
-            ) = parse_synthetic(args.dataset_name, args.N_input, args.N_output, t2v_type=args.t2v_type)
-
-
+            ) = parse_gecco(args.dataset_name, args.N_input, args.N_output)
+        
         if args.use_feats:
             assert 'feats' in data_train[0].keys()
 
@@ -895,27 +788,16 @@ class DataProcessor(object):
         self.dev_tsid_map = dev_tsid_map
         self.test_tsid_map = test_tsid_map
         self.feats_info = feats_info
+        
 
+    def get_processed_data(self, args):
 
-    def get_processed_data(self, args, agg_method, K):
-
-        if agg_method in ['wavelet']:
-            wavelet_levels = args.wavelet_levels
-            K_list = range(1, args.wavelet_levels+1+1+1)
-            # +1 : wavedec returns args.wavelet_levels+1 coefficients
-            # +1 : Extra slot for base values
-            # +1 : Because starting index is 1.
-        else:
-            wavelet_levels = None
-            K_list = args.K_list
- 
- 
         # set_trace()
         lazy_dataset_train = TimeSeriesDatasetOfflineAggregate(
             self.data_train, args.N_input, args.N_output,
-            agg_method, K, which_split='train',
+            which_split='train',
             norm_type=args.normalize,
-            feats_info=self.feats_info,
+            feats_info=self.feats_info,options=args.options,nhead=args.nhead
         )
 
         # set_trace()
@@ -932,26 +814,25 @@ class DataProcessor(object):
         #ipdb.set_trace()
         lazy_dataset_dev = TimeSeriesDatasetOfflineAggregate(
             self.data_dev, args.N_input, args.N_output,
-            agg_method, K,
             input_norm=dev_norm, which_split='dev',
             #target_norm=Normalizer(self.data_dev, 'same'),
             target_norm=dev_norm,
             feats_info=self.feats_info,
             tsid_map=self.dev_tsid_map,
             feats_norms=feats_norms,
-            train_obj=lazy_dataset_train
+            train_obj=lazy_dataset_train,options=args.options,nhead=args.nhead
         )
         print('Number of chunks in dev data:', len(lazy_dataset_dev))
         lazy_dataset_test = TimeSeriesDatasetOfflineAggregate(
             self.data_test, args.N_input, args.N_output,
-            agg_method, K, which_split='test',
+            which_split='test',
             input_norm=test_norm,
             #target_norm=test_norm,
             target_norm=Normalizer(self.data_test, 'same'),
             feats_info=self.feats_info,
             tsid_map=self.test_tsid_map,
             feats_norms=feats_norms,
-            train_obj=lazy_dataset_train
+            train_obj=lazy_dataset_train,options=args.options,nhead=args.nhead
         )
         print('Number of chunks in test data:', len(lazy_dataset_test))
         if len(lazy_dataset_train) >= args.batch_size:

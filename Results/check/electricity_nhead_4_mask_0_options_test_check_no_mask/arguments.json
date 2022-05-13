@@ -1,0 +1,12 @@
+{
+        "saved_dir": "./saved_models/check/electricity_nhead_4_mask_0_options_test_check_no_mask",
+        "batch_size": 128,
+        "hidden_size": 256,
+        "mask": 0,
+        "nhead": 4,
+        "options": [
+                "test"
+        ],
+        "epoch": 50,
+        "message": "check_no_mask"
+}

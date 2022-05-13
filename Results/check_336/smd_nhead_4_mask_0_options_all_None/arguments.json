@@ -1,0 +1,14 @@
+{
+        "saved_dir": "./saved_models/check_336/smd_nhead_4_mask_0_options_all_None",
+        "batch_size": 128,
+        "hidden_size": 256,
+        "mask": 0,
+        "nhead": 4,
+        "options": [
+                "train",
+                "dev",
+                "test"
+        ],
+        "epoch": 50,
+        "message": null
+}

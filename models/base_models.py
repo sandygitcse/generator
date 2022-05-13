@@ -1,3 +1,4 @@
+from bdb import set_trace
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -155,7 +156,7 @@ class PositionalEncoding(nn.Module):
 class ARTransformerModel(nn.Module):
     def __init__(
             self, dec_len, feats_info, estimate_type, use_feats, t2v_type,
-            v_dim, kernel_size, nkernel, device, is_signature=False
+            v_dim, kernel_size, nkernel, device, is_signature=False,nhead=1
         ):
         super(ARTransformerModel, self).__init__()
 
@@ -165,6 +166,7 @@ class ARTransformerModel(nn.Module):
         self.use_feats = use_feats
         self.t2v_type = t2v_type
         self.v_dim = v_dim
+        self.nhead = nhead
         self.device = device
         self.is_signature = is_signature
         self.use_covariate_var_model = False
@@ -233,12 +235,12 @@ class ARTransformerModel(nn.Module):
             #import ipdb ; ipdb.set_trace()
 
         self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=enc_input_size, nhead=4, dropout=0, dim_feedforward=512
+            d_model=enc_input_size, nhead=self.nhead, dropout=0, dim_feedforward=512
         )
         self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=2)
 
         self.decoder_layer = nn.TransformerDecoderLayer(
-            d_model=nkernel, nhead=4, dropout=0, dim_feedforward=512
+            d_model=nkernel, nhead=self.nhead, dropout=0, dim_feedforward=512
         )
         self.decoder_mean = nn.TransformerDecoder(self.decoder_layer, num_layers=2)
         if self.estimate_type in ['variance', 'covariance', 'bivariate']:
@@ -329,9 +331,9 @@ class ARTransformerModel(nn.Module):
         return encoder_output
 
     def forward(
-        self, feats_in, X_in, feats_out, X_out=None, teacher_force=None
+        self, feats_in, X_in, feats_out, X_out=None, teacher_force=None,mask=None
     ):
-
+        
         #X_in = X_in[..., -X_in.shape[1]//5:, :]
         #feats_in = feats_in[..., -feats_in.shape[1]//5:, :]
 
@@ -404,7 +406,8 @@ class ARTransformerModel(nn.Module):
             enc_input = enc_input + self.t2v_dropout(t2v)
         else:
             enc_input = self.positional(enc_input)
-        encoder_output = self.encoder(enc_input)
+        
+        encoder_output = self.encoder(enc_input,mask)
 
         if self.use_feats:
             feats_out_merged = []
@@ -1288,6 +1291,7 @@ class RNNNARModel(nn.Module):
         self.hidden_size = hidden_size
         self.batch_size = batch_size
         self.estimate_type = estimate_type
+        self.is_signature = None
         self.device = device
         self.use_feats = use_feats
         self.v_dim = v_dim
@@ -1348,7 +1352,7 @@ class RNNNARModel(nn.Module):
             torch.zeros(self.num_rnn_layers, batch_size, self.hidden_size, device=self.device)
         )
 
-    def forward(self, feats_in, X_in, feats_out, X_out=None):
+    def forward(self, feats_in, X_in, feats_out, X_out=None,mask=None,teacher_force=None,is_signature=False):
 
         if self.use_feats:
             feats_in_merged, feats_out_merged = [], []
@@ -2177,13 +2181,13 @@ class Net_GRU(nn.Module):
         return means, stds
 
 def get_base_model(
-    args, base_model_name, level, N_input, N_output,
-    input_size, output_size, estimate_type, feats_info
+    args, base_model_name, N_input, N_output,
+    input_size, output_size, estimate_type, feats_info,nhead=1
 ):
 
     #hidden_size = max(int(config['hidden_size']*1.0/int(np.sqrt(level))), args.fc_units)
     hidden_size = args.hidden_size
-
+    
     if base_model_name in ['rnn-mse-nar', 'rnn-nll-nar', 'rnn-fnll-nar']:
         net_gru = RNNNARModel(
             dec_len=N_output,
@@ -2213,7 +2217,7 @@ def get_base_model(
             net_gru = ARTransformerModel(
                 N_output, feats_info, estimate_type, args.use_feats,
                 args.t2v_type, args.v_dim,
-                kernel_size=10, nkernel=32, device=args.device
+                kernel_size=10, nkernel=32, device=args.device,nhead=nhead
             ).to(args.device)
     elif base_model_name in ['trans-nll-atr']:
             net_gru = ATRTransformerModel(

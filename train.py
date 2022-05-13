@@ -3,8 +3,7 @@ import pdb
 import numpy as np
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from loss.dilate_loss import dilate_loss
-from eval import eval_base_model, eval_index_model
+from eval import eval_base_model
 import time
 from models.base_models import get_base_model
 from utils import DataProcessor, get_inputs_median
@@ -79,8 +78,9 @@ def train_model(
             print('No saved model found')
         best_epoch = -1
         best_metric = np.inf
+    
     net.train()
-
+    # set_trace()
     if net.estimate_type in ['point']:
         mse_loss = torch.nn.MSELoss()
 
@@ -91,8 +91,9 @@ def train_model(
         epoch_loss, epoch_time = 0., 0.
         for i, data in enumerate(trainloader, 0):
             st = time.time()
-            inputs, target, feats_in, feats_tgt, _, _ = data
+            inputs, target,mask, feats_in, feats_tgt, _, _ = data
             target = target.to(args.device)
+            mask = mask.to(args.device)
             batch_size, N_output = target.shape[0:2]
 
             #import ipdb ; ipdb.set_trace()
@@ -106,10 +107,15 @@ def train_model(
                 teacher_force = True
             else:
                 teacher_force = False
+
+            if args.nhead >1:
+                mask = mask.transpose(1,0).reshape(-1,N_input,N_input)
+            # import pdb;pdb.set_trace()
+            
             out = net(
                 feats_in.to(args.device), inputs.to(args.device),
                 feats_tgt.to(args.device), target.to(args.device),
-                teacher_force=teacher_force
+                teacher_force=teacher_force,mask=mask.to(args.device) if args.mask==1 else None
             )
             if net.is_signature:
                 if net.estimate_type in ['point']:
@@ -139,8 +145,6 @@ def train_model(
             ]:
                 loss_mse = criterion(target.to(args.device), means.to(args.device))
                 loss = loss_mse
-            if model_name in ['seq2seqdilate']:
-                loss, loss_shape, loss_temporal = dilate_loss(target, means, args.alpha, args.gamma, args.device)
 
             ## this is for huber loss
             if model_name in ['trans-huber-ar']:
@@ -283,27 +287,25 @@ def train_model(
             #if i>=100:
             #    break
             if (curr_step % args.print_every == 0):
-                (
-                    _, _, pred_mu, pred_std,
-                    metric_dilate, metric_mse, metric_dtw, metric_tdi,
-                    metric_crps, metric_mae, metric_crps_part, metric_nll, metric_ql
-                )= eval_base_model(
-                    args, model_name, net, devloader, norm, args.gamma, verbose=1
+                outputs_dict, metrics_dict = eval_base_model(
+                    args, model_name, net, devloader, norm, 'val', verbose=1
                 )
 
-                if model_name in ['seq2seqdilate']:
-                    metric = metric_dilate
-                elif 'mse' in model_name:
+
+                if 'mse' in model_name:
                     #metric = metric_crps
-                    metric = metric_mse
+                    metric = metrics_dict['metric_mse']
                 elif 'huber' in model_name:
                     #metric = metric_crps
-                    metric = metric_mse
+                    metric = metrics_dict['metric_mse']
                 elif 'nll' in model_name:
-                    metric = metric_nll
+                    metric = metrics_dict['metric_nll']
                     #metric = metric_crps
                 elif '-q-' in model_name:
-                    metric = metric_ql
+                    metric = metrics_dict['metric_ql']
+                metric_mse, metric_dtw, metric_tdi, metric_crps, metric_mae, metric_smape, total_time = metrics_dict['metric_mse'], metrics_dict['metric_dtw'], metrics_dict['metric_tdi'], metrics_dict['metric_crps'], metrics_dict['metric_mae'], metrics_dict['metric_smape'], metrics_dict['total_time']
+                metric_nll, metric_ql = metrics_dict['metric_nll'], metrics_dict['metric_ql']
+
 
                 #if True:
                 if metric < best_metric:
@@ -324,8 +326,6 @@ def train_model(
                 scheduler.step(metric)
 
                 # ...log the metrics
-                if model_name in ['seq2seqdilate']:
-                    writer.add_scalar('dev_metrics/dilate', metric_dilate, curr_step)
                 writer.add_scalar('dev_metrics/crps', metric_crps, curr_step)
                 writer.add_scalar('dev_metrics/mae', metric_mae, curr_step)
                 writer.add_scalar('dev_metrics/mse', metric_mse, curr_step)
@@ -337,8 +337,6 @@ def train_model(
                 break
 
         # ...log the epoch_loss
-        if model_name in ['seq2seqdilate']:
-            writer.add_scalar('training_loss/DILATE', epoch_loss, curr_epoch)
         if model_name in [
             'seq2seqmse', 'convmse', 'convmsenonar', 'rnn-mse-nar', 'trans-mse-nar', 'rnn-mse-ar',
             'nbeats-mse-nar', 'nbeatsd-mse-nar'
@@ -366,17 +364,13 @@ def train_model(
     net.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     net.eval()
-    (
-        _, _, pred_mu, pred_std,
-        metric_dilate, metric_mse, metric_dtw, metric_tdi,
-        metric_crps, metric_mae, metric_crps_part, metric_nll, metric_ql
-    ) = eval_base_model(
-        args, model_name, net, devloader, norm, args.gamma, verbose=1
+    # (
+    #     _, _, pred_mu, pred_std,
+    #     metric_dilate, metric_mse, metric_dtw, metric_tdi,
+    #     metric_crps, metric_mae, metric_crps_part, metric_nll, metric_ql
+    # ) 
+    outputs_dict, metrics_dict = eval_base_model(
+        args, model_name, net, devloader, norm, 'val', verbose=1
     )
 
-    if model_name in ['seq2seqdilate']:
-        metric = metric_dilate
-    else:
-        metric = metric_crps
-
-    return metric
+    return

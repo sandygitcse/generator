@@ -119,7 +119,6 @@
 #	--saved_models_dir aaai_saved_models_ett_e384_d192_chunkfix_3_lr1e5_prunelastday_rp \
 #	--output_dir aaai_Outputs_ett_e384_d192_chunkfix_3_lr1e5_prunelastday_rp \
 #	--K_list 1 4 6 12 \
-#	--cv_inf 0 \
 #	--device cuda:2
 
 #python main.py Solar \
@@ -127,7 +126,6 @@
 #	--saved_models_dir aaai_saved_models_Solar_e336_d168_2_rp \
 #	--output_dir aaai_Outputs_Solar_e336_d168_2_rp \
 #	--K_list 1 2 6 12 \
-#	--cv_inf 0 \
 #	--device cuda:2
 
 #python main.py etthourly \
@@ -135,31 +133,51 @@
 #	--saved_models_dir aaai_saved_models_etthourly_e168_d168_9_lr1e5_prunelastday_rp \
 #	--output_dir aaai_Outputs_etthourly_e168_d168_9_lr1e5_prunelastday_rp \
 #	--K_list 1 2 6 \
-#	--cv_inf 0 \
 #	--device cuda:1
 
-python main.py electricity \
-	--N_input 336 --N_output 168 \
-	--saved_models_dir Results/series/saved_models/20_percent_both\
-	--output_dir Results/series/Outputs/20_percent_both \
-	--K_list 1 \
-	--cv_inf 0 \
-	--device cuda:1
+# python main.py electricity \
+# 	--N_input 336 --N_output 336 \
+# 	--saved_models_dir saved_models/check_336/\
+# 	--output_dir Results/check_336\
+# 	--nhead 4\
+# 	--mask 1\
+# 	--device cuda:0\
+# 	--message incasting\
+# 	--options train dev test
+
+
+
+python main.py gecco \
+	--N_input 180 --N_output 180 \
+	--saved_models_dir saved_models/gecco_min_gen/mask_testing_3 \
+	--output_dir Results/gecco_min_gen/mask_testing_3 \
+	--device cuda:0\
+	--epochs 50\
+	--mask 1 \
+	--message Full_l\
+	--options train test dev
+
+
+# python main.py smd \
+# 	--N_input 50 --N_output 50 \
+# 	--saved_models_dir saved_models/check__smd/\
+# 	--output_dir Results/check_smd\
+# 	--nhead 4\
+# 	--mask 0\
+# 	--device cuda:1\
+# 	--message 50_50\
+# 	--options train dev test
 
 #python main.py foodinflation \
 #	--N_input 90 --N_output 30 \
 #	--saved_models_dir saved_models_foodinflation \
 #	--output_dir Outputs_foodinflation \
-#	--K_list 1 \
-#	--cv_inf 0 \
 #	--device cuda:1
 
 # python3 main.py telemetry \
 # 	--N_input 365 --N_output 100 \
 # 	--saved_models_dir saved_models_telemetry_tyt \
 # 	--output_dir Outputs_telemetry_t \
-# 	--K_list 1 \
-# 	--cv_inf 0 \
 # 	--initialization 0\
 # 	--device cuda:1
 
@@ -168,8 +186,6 @@ python main.py electricity \
 # 	--N_input 100 --N_output 50 \
 # 	--saved_models_dir saved_models/saved_models_synthetic_out_huber \
 # 	--output_dir Outputs/Outputs_synthetic_out_huber \
-# 	--K_list 1 \
-# 	--cv_inf 0 \
 # 	--initialization 0\
 # 	--device cuda:0
 

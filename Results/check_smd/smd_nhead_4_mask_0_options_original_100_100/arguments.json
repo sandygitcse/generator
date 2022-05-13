@@ -1,0 +1,10 @@
+{
+        "saved_dir": "./saved_models/check__smd/smd_nhead_4_mask_0_options_original_100_100",
+        "batch_size": 128,
+        "hidden_size": 256,
+        "mask": 0,
+        "nhead": 4,
+        "options": [],
+        "epoch": 50,
+        "message": "100_100"
+}

@@ -1,0 +1,6 @@
+
+Model Name, MAE, DTW, TDI
+trans-mse-ar, 50.690792, 50.690788, 8861.307617, 0.000000, 0.000000
+
+
+injected values in the preds.
