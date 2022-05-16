@@ -14,7 +14,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import time,random
 from pdb import set_trace
 from data.synthetic_dataset import create_synthetic_dataset, create_sin_dataset, SyntheticDataset
-from data.real_dataset import parse_electricity,parse_smd,parse_gecco
+from data.real_dataset import parse_electricity,parse_smd,parse_gecco,parse_energy_data
 torch.backends.cudnn.deterministic = True
 
 to_float_tensor = lambda x: torch.FloatTensor(x.copy())
@@ -778,6 +778,13 @@ class DataProcessor(object):
                 dev_tsid_map, test_tsid_map,
                 feats_info
             ) = parse_gecco(args.dataset_name, args.N_input, args.N_output)
+         
+        elif args.dataset_name in ['energy']:
+            (
+                data_train, data_dev, data_test,
+                dev_tsid_map, test_tsid_map,
+                feats_info
+            ) = parse_energy_data(args.dataset_name, args.N_input, args.N_output)
         
         if args.use_feats:
             assert 'feats' in data_train[0].keys()

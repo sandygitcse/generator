@@ -347,6 +347,26 @@ elif args.dataset_name == 'gecco':
     #args.print_every = 5 # TODO: Only for aggregate models
     if args.device is None: args.device = 'cuda:0'
 
+elif args.dataset_name == 'energy':
+    if args.epochs == -1: args.epochs = 50
+    if args.N_input == -1: args.N_input = 360
+    if args.N_output == -1: args.N_output = 360
+    #args.K_list = [12]
+    if args.saved_models_dir is None:
+        args.saved_models_dir = 'saved_models_etthourly_noextrafeats_d168_b24_pefix_e168_val20_corrshuffle_seplayers_nodeczeros_nodecconv_t2v'
+    if args.output_dir is None:
+        args.output_dir = 'Outputs_etthourly_noextrafeats_d168_klnorm_b24_pefix_e168_val20_corrshuffle_seplayers_nodeczeros_nodecconv_t2v'
+    if args.normalize is None: args.normalize = 'zscore_per_series'
+    if args.learning_rate == -1.: args.learning_rate = 0.0001
+    if args.batch_size == -1: args.batch_size = 256
+    if args.hidden_size == -1: args.hidden_size = 128
+    if args.num_grulstm_layers == -1: args.num_grulstm_layers = 1
+    if args.v_dim == -1: args.v_dim = 4
+    if args.b == -1: args.b = 24
+    if args.use_feats == -1: args.use_feats = 1
+    #args.print_every = 5 # TODO: Only for aggregate models
+    if args.device is None: args.device = 'cuda:0'
+
 
 elif args.dataset_name == 'aggtest':
     if args.epochs == -1: args.epochs = 1
