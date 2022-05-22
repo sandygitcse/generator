@@ -225,7 +225,7 @@ def parse_gecco(dataset_name, N_input, N_output, t2v_type=None):
 
     df = pd.read_csv(DATA_DIRS+'data/water_quality/gecco2018.csv')
   
-    df = df[40000:120000]
+    df = df[40000:80000]
 
     data = df[['pH']].to_numpy().T
     df['EVENT'] = df['EVENT'].map({False:0, True: 1})
@@ -299,8 +299,9 @@ def parse_gecco(dataset_name, N_input, N_output, t2v_type=None):
         for j in range(train_len+dev_len+N_output-seq_len, n+1, N_output):
             if j <= n:
                 # print(i,j,n)
+                mask = torch.zeros_like(data_mask[i,:j])
                 data_test.append(data[i, :j])
-                data_mask_test.append(data_mask[i,:j])
+                data_mask_test.append(mask)
                 feats_test.append(feats[i, :j])
                 test_tsid_map.append(i)
                 for k in range(0,N_input-25,25):
@@ -355,12 +356,19 @@ def parse_energy_data(dataset_name, N_input, N_output, t2v_type=None):
 #    n = train_len + dev_len + test_len
 #    df = pd.read_csv('../Informer2020/data/ETT/ETTh1.csv').iloc[:n]
 
-    df = pd.read_csv(DATA_DIRS+'data/energy-anomaly-detection/train.csv')
+   
+    # df = pd.read_csv(DATA_DIRS+'data/energy-anomaly-detection/train.csv')
     
-    df = df[df['building_id']==966].interpolate(limit_direction='both',method='linear')
-    data = df[['meter_reading']].to_numpy().T
-    # set_trace()
+    # df = df[df['building_id']==966].interpolate(limit_direction='both',method='linear')
+    # data = df[['meter_reading']].to_numpy().T
+    # # set_trace()
+    # data_mask = df[['anomaly']].to_numpy().T
+
+    df = pd.read_csv(DATA_DIRS+'data/energy-anomaly-detection/energy_injected_5.csv')
+    data = df[['meter_reading']].to_numpy().T 
     data_mask = df[['anomaly']].to_numpy().T
+
+
     #data = np.expand_dims(data, axis=-1)
     # test_data = np.load(os.path.join(DATA_DIRS,"data","water_quality","gecco_test_mask.npy"))
     # test_l = len(test_data)
@@ -370,7 +378,7 @@ def parse_energy_data(dataset_name, N_input, N_output, t2v_type=None):
     dev_len = int(0.2*units) * N_output
     test_len = int(0.2*units) * N_output
     train_len = n - dev_len - test_len
-
+    # set_trace()
     ### generated masking
     # data_mask[...,-test_l-N_output:-N_output] = test_data 
   
@@ -427,8 +435,9 @@ def parse_energy_data(dataset_name, N_input, N_output, t2v_type=None):
         for j in range(train_len+dev_len+N_output-seq_len, n+1, N_output):
             if j <= n:
                 # print(i,j,n)
+                mask = torch.zeros_like(data_mask[i,:j])
                 data_test.append(data[i, :j])
-                data_mask_test.append(data_mask[i,:j])
+                data_mask_test.append(mask)
                 feats_test.append(feats[i, :j])
                 test_tsid_map.append(i)
                 for k in range(0,N_input-25,25):

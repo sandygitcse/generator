@@ -1,0 +1,15 @@
+{
+        "saved_dir": "./saved_models/energy_inj/testing_1/energy_nhead_4_mask_1_options_all_50_epoch",
+        "batch_size": 128,
+        "hidden_size": 256,
+        "mask": 1,
+        "nhead": 4,
+        "options": [
+                "train",
+                "test",
+                "dev"
+        ],
+        "epoch": 50,
+        "lr": 0.0001,
+        "message": "50_epoch"
+}

@@ -149,26 +149,25 @@
 
 # python main.py gecco \
 # 	--N_input 180 --N_output 180 \
-# 	--saved_models_dir saved_models/gecco_min_gen/mask_testing_3 \
-# 	--output_dir Results/gecco_min_gen/mask_testing_3 \
+# 	--saved_models_dir saved_models/gecco_min_gen/mask_testing_5 \
+# 	--output_dir Results/gecco_min_gen/mask_testing_5 \
 # 	--device cuda:0\
-# 	--epochs 50\
+# 	--epochs 1\
 # 	--mask 1 \
-# 	--message Full_l\
+# 	--message change\
 # 	--options train test dev
-
 
 
 
 python main.py energy \
 	--N_input 168 --N_output 168 \
-	--saved_models_dir saved_models/energy/testing_3 \
-	--output_dir Results/energy/testing_3 \
+	--saved_models_dir saved_models/energy_inj/testing_feat \
+	--output_dir Results/energy_inj/testing_feats \
 	--device cuda:1\
-	--epochs 50 \
-	--mask 0\
-	--message 50_epoch 
-	# --options train test dev
+	--epochs 50\
+	--mask 1\
+	--message 50_epoch \
+	--options train test dev
 
 
 
